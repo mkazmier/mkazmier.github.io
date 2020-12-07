@@ -31,9 +31,11 @@ author:
   name: ""
   email: ""
 # Build settings
-theme: minima
+#theme: minima
 plugins:
   - jekyll-feed
+  - jekyll-remote-theme
+remote_theme: jekyll/minima
 minima:
   skin: dark
   social_links:

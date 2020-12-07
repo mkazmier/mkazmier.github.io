@@ -1,1 +1,1 @@
-Personal blog source: [https://mkazmierski.me]().
+Personal blog source: [](https://mkazmierski.me).

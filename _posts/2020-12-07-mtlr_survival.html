@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="dcterms.date" content="2020-12-08" />
+  <title>Predicting survival using multi-task logistic regression</title>
+  <style>
+    html {
+      line-height: 1.5;
+      font-family: Georgia, serif;
+      font-size: 20px;
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      word-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 1em;
+      }
+    }
+    @media print {
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, 'Lucida Console', Consolas, monospace;
+      font-size: 85%;
+      margin: 0;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+  </style>
+  true
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Predicting survival using multi-task logistic regression</h1>
+<p class="date">2020-12-08</p>
+</header>
+<ul>
+<li><a href="#survival-analysis">Survival analysis</a></li>
+<li><a href="#notation-and-mathematical-preliminaries">Notation and mathematical preliminaries</a></li>
+<li><a href="#learning-survival-distributions-using-multi-task-logistic-regression">Learning survival distributions using multi-task logistic regression</a>
+<ul>
+<li><a href="#the-likelihood-function">The likelihood function</a></li>
+<li><a href="#dealing-with-censoring">Dealing with censoring</a></li>
+</ul></li>
+<li><a href="#using-mtlr">Using MTLR</a></li>
+<li><a href="#alternative-derivation-as-a-probabilistic-graphical-model">Alternative derivation as a probabilistic graphical model</a></li>
+<li><a href="#conclusions">Conclusions</a></li>
+<li><a href="#references-useful-resources">References &amp; useful resources</a></li>
+<li><a href="#footnotes">Footnotes</a></li>
+</ul>
+<p>In this post, I will describe an interesting machine learning algorithm for survival prediction I've been playing around with recently. This post will be fairly technical — if you just want to see it in action, you can head stratight to the <a href="https://colab.research.google.com/drive/1CkIEzctAE8_WPsXQdt2xPkY1kwbN3BSX?usp=sharing">Colab notebook</a> or check out my PyTorch implementation on <a href="https://github.com/mkazmier/torchmtlr">Github</a>.</p>
+<h2 id="survival-analysis">Survival analysis</h2>
+<p>In many real world problems, we're interested in predicting the time until a certain event occurs. For example, we might be interested in the survival of a cancer patient, the time until some part of a machine needs replacement, or the time before a customer drops out. One unique aspect of the problem, which warrants the use of specialized methods is <em>censoring</em> — a particular form of the missing data problem. Suppose we have a dataset of cancer patients and are interested in predicting the time until cancer-related death. For patients who already died at the time of analysis, the solution is straightforward: we could just obtain their date of death (assuming a sufficiently complete and accurate registry) and treat it as a supervised learning problem. However, what about patients whose death we haven't observed (called <em>censored</em> in survival analysis parlance), for example because they're still alive, or moved out to another country? Excluding those cases could significantly reduce the size of our training data and might introduce bias into the analysis. Furthermore, censored observations still carry partial information — we know for sure that someone who is still alive after, say, a 5-year study have not died before that time. Censoring is a central issue in survival analysis, and many of the methods and algorithms are motivated by trying to handle it in a sensible way.</p>
+<h2 id="notation-and-mathematical-preliminaries">Notation and mathematical preliminaries</h2>
+<p>We'll assume we have access to a dataset <span class="math display">\[D\]</span> with <span class="math display">\[N\]</span> samples. Each sample is represented by a 3-tuple <span class="math display">\[(T^{(n)}, \delta^{(n)}, \mathbf{x}^{(n)})\]</span>, where:</p>
+<ul>
+<li><span class="math display">\[T^{(n)}\]</span> is the time to event (e.g. death) or censoring,</li>
+<li><span class="math display">\[\delta^{(n)}\]</span> is the event indicator—it's equal to 1 if the event was observed and 0 if the instance was censored,</li>
+<li><span class="math display">\[\mathbf{x}^{(n)}\]</span> is a vector of features (e.g. age, cancer stage, gene expression levels, etc.).</li>
+</ul>
+<p>You'll often see me refer to data instances as patients, since I've been working primarily with medical data recently. However, the same principles apply to other types of instances and events, e.g. machines failing or customers dropping out.</p>
+<p>The <em>probability density function</em> (PDF) <span class="math display">\[f(t)\]</span> defines the probability of event occuring in some particular interval:</p>
+<p><span class="math display">\[
+P(t_i \le T \le t_j) = \int_{t_i}^{t_j} f(\tau) d\tau,\ t_i &lt; t_j.
+\]</span></p>
+<p>If we treat time as discrete (e.g. advancing in one month intervals), this becomes the probability mass function <span class="math display">\[P(T = t)\]</span> instead.</p>
+<p>The <em>survival function</em> is the probability of surviving longer than some time <span class="math display">\[t\]</span>:</p>
+<p><span class="math display">\[
+S(t) = P(T &gt; t) = 1 - F(t),\ 0 \le t &lt; \infty, 
+\]</span></p>
+<p>where <span class="math display">\[F(t) = \int_0^t f(\tau) d\tau\]</span> is the cumulative distribution function (CDF). Or, in the discrete case:</p>
+<p><span class="math display">\[
+S(t) = 1 - \sum_{k=0}^t P(T = t_k),\ 0 \le t &lt; \infty, 
+\]</span></p>
+<p>Note that <span class="math display">\[S(0) = 1\]</span>. We'll be primarily interested in the survival function here, since it lets us answer questions like 'What is the probability that this patient will survive longer than 2 years?'</p>
+<h2 id="learning-survival-distributions-using-multi-task-logistic-regression">Learning survival distributions using multi-task logistic regression</h2>
+<p>So how could we learn to predict survival given some features <span class="math display">\[\mathbf{x}\]</span>? Let’s assume there are no censored observations for now — we will deal with the general case shortly. One idea would be to fix a timepoint, say <span class="math display">\[t^*\]</span> and treat the problem as binary classification. We define <span class="math display">\[y = 0\]</span> if <span class="math display">\[T &lt; t^*\]</span> and <span class="math display">\[y = 1\]</span> if <span class="math display">\[T \ge t^*\]</span> and use <a href="https://en.wikipedia.org/wiki/Logistic_regression">logistic regression</a> to predict whether a patient survives longer than <span class="math display">\[t^*\]</span>:</p>
+<p><span class="math display">\[
+ P_{\boldsymbol{\theta}}(y = 1 \mid \mathbf{x}) = \frac{1}{1+\exp(-(\boldsymbol{\theta}^T\mathbf{x} +
+b))},
+\]</span></p>
+<p>where <span class="math display">\[\boldsymbol{\theta}, b\]</span> are trainable parameters. One advantage of this approach is simplicity — it works pretty much out of the box with any logistic regression implementation, no need to roll out any custom algorithms. A big issue though is that binarization can obscure important information. As an example, consider 2 cancer patients: one who lives for 2 years and 1 month and another surviving for 15 years after diagnosis. It seems obvious that these are quite different cases, but from the perspective of the binary model they both fall in the same class. This makes learning more difficult, as dissimilar samples are forced together into one class, and the predictions themselves are less informative. Also, for many problems it might not be obvious what cutoff time to choose. Ideally, we would like not to choose at all and make use of all the available information.</p>
+<p>A simple extension of the above approach is to consider several different timepoints (say, <span class="math display">\[K+1\]</span>), dividing the time axis into discrete intervals and then using logistic regression to predict the probability that the event occurs within each interval.</p>
+<p>{:refdef: style=“text-align: center;”} <img src="/assets/images/mtlr_time_discretization.svg" /> {: refdef}</p>
+<p>That is, in each time interval <span class="math display">\[[t_{k-1}, t_k)\]</span> we solve a binary classification problem:</p>
+<p><span class="math display">\[
+P_{\boldsymbol{\theta}_i}(y_k = 1 \mid \mathbf{x}) =
+\frac{1}{1+\exp(-(\boldsymbol{\theta}_k^T\mathbf{x} + b_k))},\ 1 \le k \le K - 1,
+\]</span></p>
+<p>where <span class="math display">\[y_i = 1\]</span> if <span class="math display">\[t_{k-1} \le T &lt; t_k\]</span>, i.e. if the patient experienced an event between <span class="math display">\[t_{k-1}\]</span> and <span class="math display">\[t_k\]</span>. We use a separate set of parameters <span class="math display">\[(\boldsymbol{\theta}_k, b_k)\]</span> at each timepoint, to capture the potentially time-varying effect of features. Also, note that the event probability at time <span class="math display">\[t_0 = 0\]</span> is <span class="math display">\[P(y_0 = 1) = 0\]</span>, since it's assumed that nobody experiences an event before the observation period. This can be represented as a binary sequence of length <span class="math display">\[K\]</span>, with 0s and 1s used as above.</p>
+<p>{:refdef: style=“text-align: center;”} <img src="/assets/images/mtlr_encoding.svg" /> {: refdef}</p>
+<p>The sequence notation is simply more convenient to use in derivations — you should remember that probabilities of these binary sequences map directly to probabilites of events:</p>
+<p><span class="math display">\[
+P((y_1 = 0, \dots, y_{k-1}=0, y_k = 1, \dots, y_K = 1)) = P(t_{k-1} \le T &lt; t_k).
+\]</span></p>
+<p>We have turned the task of survival prediction into a series of binary classification tasks, which we solve using logistic regression. To train the model, we now need to derive the likelihood function.</p>
+<h3 id="the-likelihood-function">The likelihood function</h3>
+<p>If the event probabilities were independent, the probability of a sequence <span class="math display">\[\mathbf{y}\]</span> would be the joint probability of the individual <span class="math display">\[y_i\]</span>s:</p>
+<p><span class="math display">\[
+P_{\boldsymbol{\Theta}}(\mathbf{y} = (y_1, y_2, \dots, y_{K-1}) \mid \mathbf{x}) =
+P_{\boldsymbol{\theta}_1}(y_1 \mid \mathbf{x})P_{\boldsymbol{\theta}_2}(y_2
+\mid \mathbf{x})\dots P_{\boldsymbol{\theta}_{K-1}}(y_{K-1}\mid \mathbf{x}).
+\]</span></p>
+<p>To evaluate this product, we will use two properties of the logistic sigmoid function:</p>
+<ol type="1">
+<li><span class="math display">\[\frac{1}{1+\exp(-u)} = \frac{\exp(u)}{1+\exp{u}}\]</span> and</li>
+<li><span class="math display">\[1 - \frac{1}{1+\exp(-u)} = \frac{1}{1+\exp(u)}\]</span>.</li>
+</ol>
+<p>First, write the predicted probability of <span class="math display">\[y = 0\]</span> and <span class="math display">\[y = 1\]</span> as</p>
+<p><span class="math display">\[ 
+\begin{align}
+P_{\boldsymbol{\theta}_k}(y_k = 1 \mid \mathbf{x}) &amp;=
+\frac{1}{1+\exp(-(\boldsymbol{\theta}_k^T\mathbf{x} + b_k))}\\ &amp;=
+\frac{\exp((\boldsymbol{\theta}_k^T\mathbf{x} +
+b_k)y_k)}{1+\exp(\boldsymbol{\theta}_k^T\mathbf{x} + b_k)}  \text{(Using property 1)}
+\end{align}
+\]</span></p>
+<p>and</p>
+<p><span class="math display">\[
+\begin{align}
+P_{\boldsymbol{\theta}_k}(y_k = 0 \mid \mathbf{x}) &amp;= 1-P_{\boldsymbol{\theta}_k}(y_k = 1 \mid \mathbf{x})\\
+ &amp;= 1 - \frac{1}{1+\exp(-(\boldsymbol{\theta}_k^T\mathbf{x} + b_k))}\\ 
+&amp;= \frac{1}{1+\exp(\boldsymbol{\theta}_k^T\mathbf{x} + b_k)} &amp;  \text{(Using property 2)}\\
+&amp;= \frac{\exp((\boldsymbol{\theta}_k^T\mathbf{x} + b_k)y_k)}{1+\exp(\boldsymbol{\theta}_k^T\mathbf{x} + b_k)} &amp; \text{(Using property 1 and }y_k=0\text{)}.
+\end{align} 
+\]</span></p>
+<p>This lets us write the joint density as</p>
+<p><span class="math display">\[
+\begin{align}
+P_{\boldsymbol{\Theta}}(\mathbf{y} = (y_1, y_2, \dots, y_{K-1}) \mid \mathbf{x}) &amp;=
+\frac{\exp((\boldsymbol{\theta}_1^T\mathbf{x} + b_1)y_1)}{1+\exp(\boldsymbol{\theta}_1^T\mathbf{x} + b_1)} \times
+ \dots \times
+\frac{\exp((\boldsymbol{\theta}_{K-1}^T\mathbf{x} + b_{K-1})y_{K-1})}{1+\exp(\boldsymbol{\theta}_{K-1}^T\mathbf{x} + b_{K-1})}\\
+ &amp;= \frac{\exp(\sum_{k=1}^{K-1}((\boldsymbol{\theta}_k^T \mathbf{x} + b_k)y_k))}
+{\prod_{k=1}^{K-1}(1 + \exp(\mathbf{\theta}_k^T \mathbf{x} + b_k))}.
+\end{align}
+\]</span></p>
+<p>There is a problem with this derivation, however. Going back to the cancer example, if a patient dies at time <span class="math display">\[t_i\]</span>, they cannot come back to life at any time after that <a href="#fn1" class="footnote-ref" id="fnref1" role="doc-noteref"><sup>1</sup></a>. This means that certain sequences of <span class="math display">\[y\]</span>s <strong>will never appear</strong> (specifically, any sequences where for some <span class="math display">\[i,\ y_i = 1\]</span> and <span class="math display">\[y_{i+1} =
+0\]</span>), meaning the formula above underestimates the true event probability. In fact, there are only <span class="math display">\[K\]</span> legal sequences, including all 0s and all 1s (you can try enumerating all valid encodings for some small K as an exercise). We can fix this by changing the denominator to only normalize by the scores of allowed sequences:</p>
+<p><span class="math display">\[
+P_{\boldsymbol{\Theta}}(\mathbf{y} = (y_1, y_2, \dots, y_{K-1}) \mid \mathbf{x}) =
+\frac{\exp(\sum_{k=1}^{K-1}((\boldsymbol{\theta}_k^T \mathbf{x} +
+b_k)y_k))}{\sum_{i=1}^{K}\exp(\sum_{k=i}^{K-1}\boldsymbol{\theta}_k^T
+\mathbf{x} + b_k)},
+\]</span></p>
+<p>which makes the individual regressors implicitly dependent.</p>
+<p>The (uncensored) log-likelihood is now straightforward to derive: given a dataset <span class="math display">\[D = \{T^{(j)}, \delta^{(j)}, \mathbf{x}^{(j)}\}_{j=1}^{N}\]</span> we have</p>
+<p><span class="math display">\[
+\begin{align*}
+L(\boldsymbol{\Theta}, D) &amp;= \log(\prod_{j=0}^N P_{\boldsymbol{\Theta}}(\mathbf{y}^{(j)}\mid \mathbf{x}^{(j)}))\\
+&amp;= \sum_{j=1}^{N}\sum_{k=1}^{K-1}((\boldsymbol{\theta}_k^T \mathbf{x}^{(j)} +
+b_k)y_k^{(j)} - \log(\sum_{i=1}^{K}\exp(\sum_{k=i}^{K-1}\boldsymbol{\theta}_k^T
+\mathbf{x}^{(j)} + b_k))). 
+\end{align*}
+\]</span></p>
+<h3 id="dealing-with-censoring">Dealing with censoring</h3>
+<p>Recall that in survival analysis we usually have to deal with censoring, i.e. we don't know the true time of event for some patients. The key insight, used in many survival analysis algorithms, is that censored patients still provide partial information, namely that they did not experience the event before the last time we knew their status. The original MTLR publication uses this to propose an elegant method of dealing with censoring. Let's have a look at an example survival encoding <span class="math display">\[\mathbf{y}\]</span> for a censored instance (the green 'X' indicates time of censoring:</p>
+<p>{:refdef: style=“text-align: center;”} <img src="/assets/images/mtlr_censoring.svg" /> {: refdef}</p>
+<p>The ?s denote unknown status — they could be either 1 or 0, since we don't know the true time of death, only that it was no earlier than <span class="math display">\[T_c\]</span>. Based on this data alone, all of these sequences are possible:</p>
+<p><span class="math display">\[
+\begin{align*}
+&amp;(0,0,0,0,0,0),\\
+&amp;(0,0,0,0,0,1),\\
+&amp;(0,0,0,0,1,1),\\
+&amp;(0,0,0,1,1,1),\\
+&amp;(0,0,1,1,1,1)
+\end{align*}
+\]</span></p>
+<p>Under the assumption of independent censoring (censored patients are no more or less likely to experience an event than others given their covariates), all of these sequences are equally likely. We can compute the likelihood of this instance by simply summing (or <em>marginalizing</em>) over all sequences <span class="math display">\[\mathbf{y}\]</span> compatible with the observation:</p>
+<p><span class="math display">\[
+\begin{align}
+P_{\boldsymbol{\Theta}}(\mathbf{y} = (y_1, y_2, \dots, y_{K-1}) \mid \mathbf{x})
+&amp;=  P_{\boldsymbol{\Theta}}(\mathbf{y} = (y_1=0, \dots, y_j=0, y_{j+1}=0, \dots, y_{K-1}=0) \mid \mathbf{x})\\
+&amp;+ P_{\boldsymbol{\Theta}}(\mathbf{y} = (y_1=0, \dots, y_j=0, y_{j+1}=0, \dots, y_{K-1}=1) \mid \mathbf{x})\\
+&amp;+ \dots + \\
+&amp;+ P_{\boldsymbol{\Theta}}(\mathbf{y} = (y_1=0, \dots, y_j=1, y_{j+1}=1, \dots, y_{K-1}=1) \mid \mathbf{x})\\
+&amp;= \sum_{i=j}^{K-1}\frac{\exp(\sum_{k=i}^{K-1}((\boldsymbol{\theta}_k^T \mathbf{x} + b_k)y_k))}{\sum_{k=1}^{K}(1 + \exp(\mathbf{\theta}_k^T \mathbf{x} + b_k))}
+\end{align}
+\]</span></p>
+<p>where <span class="math display">\[t_j = T_c\]</span>. For the example above, this works out to</p>
+<p><span class="math display">\[
+\begin{align*}
+ &amp;P_{\boldsymbol{\Theta}}(\mathbf{y} = (0,0,0,0,0,0) \mid \mathbf{x})\\
+ +&amp;P_{\boldsymbol{\Theta}}(\mathbf{y} = (0,0,0,0,0,1) \mid \mathbf{x})\\
+ +&amp;P_{\boldsymbol{\Theta}}(\mathbf{y} = (0,0,0,0,1,1) \mid \mathbf{x})\\
+ +&amp;P_{\boldsymbol{\Theta}}(\mathbf{y} = (0,0,0,1,1,1) \mid \mathbf{x})\\
+ +&amp;P_{\boldsymbol{\Theta}}(\mathbf{y} = (0,0,1,1,1,1) \mid \mathbf{x})
+\end{align*}
+\]</span></p>
+<p>Combining that with the uncensored log-likelihood from above, the full log-likelihood for a dataset <span class="math display">\[D\]</span> with <span class="math display">\[N\]</span> instances, <span class="math display">\[N_c\]</span> of which are censored, is</p>
+<p><span class="math display">\[
+\begin{align*}
+L(\boldsymbol{\Theta}, D) &amp;=
+\sum_{j=1}^{N-N_c}\sum_{k=1}^{K-1}(\boldsymbol{\theta}_k^T \mathbf{x}^{(j)} +
+b_k)y_k^{(j)} &amp;\text{(Uncensored)}\\
+ &amp;+ \sum_{j=1}^{N_c}\sum_{i=1}^{K-1}\mathbf{1}\{t_i \ge T_c^{(j)}\}\exp(\sum_{k=i}^{K-1}((\boldsymbol{\theta}_k^T
+\mathbf{x}^{(j)} + b_k)y_k^{(j)})) &amp;\text{(Censored)}\\
+ &amp;- \sum_{j=1}^{N}\log(\sum_{i=1}^{K}
+\exp(\sum_{k=i}^{K-1}\boldsymbol{\theta}_k^T \mathbf{x}^{(j)} + b_k)), &amp;\text{(Normalizing constant)}
+\end{align*}
+\]</span></p>
+<p>where <span class="math display">\[\mathbf{1}\{\text{cond}\} = 1\]</span> if the condition in brackets is satisfied and 0 otherwise, and <span class="math display">\[T_c\]</span> is the time of censoring.</p>
+<p>To mitigate overfitting, we usually add <span class="math display">\[l_2\]</span> regularization:</p>
+<p><span class="math display">\[
+L(\boldsymbol{\Theta}, D)_{\mathrm{reg}} = L(\boldsymbol{\Theta}, D) + \frac{C_1}{2}\sum_{k=1}^{K-1}\Vert\boldsymbol{\theta}_k\Vert_2^2.
+\]</span></p>
+<p>Here, <span class="math display">\[C_1\]</span> is a hyperparameter determining the strength of regularization. It also controls how much the parameters change between consecutive timepoints and hence the smoothness of the predicted survival curves (see <a href="https://era.library.ualberta.ca/items/3deb4dd9-788d-4c61-94a5-d3ee6645f74f">here</a> for proof).</p>
+<h2 id="using-mtlr">Using MTLR</h2>
+<p>The model described above can be used to learn flexible, potentially time-varying survival functions as it is. However, since it's differentiable end-to-end, there are many more exciting possibilites. You can effectively use it as a survival prediction 'head' in any neural net, just like you would use a logistic regression layer for binary classification — for example on top of a CNN to learn to predict survival directly from medical images (something I'm working on now), an LSTM to handle time-varying features or something more exotic like a <a href="http://arxiv.org/abs/1907.03907">neural ODE</a>. Check out the <a href="https://colab.research.google.com/drive/1CkIEzctAE8_WPsXQdt2xPkY1kwbN3BSX?usp=sharing">Colab notebook</a> accompanying this post for examples using both linear and deep MTLR. I also made a ligthweight <a href="https://github.com/mkazmier/torchmtlr">PyTorch implementation</a> that can be used with any PyTorch model.</p>
+<h2 id="alternative-derivation-as-a-probabilistic-graphical-model">Alternative derivation as a probabilistic graphical model</h2>
+<p><em>(Note: this section is not required for basic understanding.)</em></p>
+<p>MTLR can also be viewed from the perspective of probabilistic graphical models. A <em>conditional random field</em> (CRF) is an undirected graphical model which is essentially an extension of logistic regression to problems with structured outputs. In particular, MTLR can be viewed as an instance of <em>linear chain CRF</em> corresponding to the following graphical model:</p>
+<p>{:refdef: style=“text-align: center;”} <img src="/assets/images/mtlr_crf.svg" /> {: refdef}</p>
+<p>The joint probability density of a generic linear chain CRF is:</p>
+<p><span class="math display">\[
+P_{\boldsymbol{\theta}}(\mathbf{y} = (y_1, y_2, \dots, y_{T}) \mid \mathbf{x}) =
+\frac{1}{Z(\mathbf{x}, \boldsymbol{\theta})}\prod_{t=1}^T \phi(y_k \mid \mathbf{x},
+\boldsymbol{\theta})\prod_{t=1}^{T-1} \phi(y_k, y_{k+1} \mid \mathbf{x}, \boldsymbol{\theta}),
+\]</span></p>
+<p>where the <span class="math display">\[\phi\]</span>s are the node and edge <em>potential functions</em><a href="#fn2" class="footnote-ref" id="fnref2" role="doc-noteref"><sup>2</sup></a> and <span class="math display">\[Z\]</span> is the normalizing constant (also known as <em>partition function</em>) which ensures that the sequence-level probabilities sum to 1:</p>
+<p><span class="math display">\[
+Z(\mathbf{x},
+\boldsymbol{\theta}) = \sum_{y&#39;} \prod_{t=1}^T \phi(y&#39;_k \mid \mathbf{x},
+\boldsymbol{\theta})\prod_{t=1}^{T-1} \phi(y&#39;_k, y&#39;_{k+1} \mid \mathbf{x},
+\boldsymbol{\theta}).
+\]</span></p>
+<p>(See <a href="https://blog.echen.me/2012/01/03/introduction-to-conditional-random-fields/">this blog post</a> and <a href="https://www.cs.ubc.ca/~murphyk/MLbook/">Kevin Murphy's textbook</a> for more information about CRFs.)</p>
+<p>To obtain the MTLR model from the general CRF, we'll use the following potential functions:</p>
+<p><span class="math display">\[
+\phi(y_k \mid \mathbf{x}, \boldsymbol{\theta}_k) =
+\exp(y_k(\boldsymbol{\theta}_k^T\mathbf{x} + b_k))
+\]</span></p>
+<p>and</p>
+<p><span class="math display">\[
+\phi(y_k, y_{k+1} \mid \mathbf{x}, \boldsymbol{\theta}_k) =
+\mathbf{1}\{y_k = 0 \lor y_{k+1} = 1\},
+\]</span></p>
+<p>(the role of the second potential function will become clear soon). Note that while most CRFs used in e.g. natural language processing tend to shared parameters over all nodes, here we use a separate weight vector for each node to capture the time-varying effect of features.</p>
+<p>Plugging the above potentials into the above density gives</p>
+<p><span class="math display">\[
+\begin{align}
+P_{\boldsymbol{\theta}}(\mathbf{y} = (y_1, y_2, \dots, y_{T}) \mid \mathbf{x}) &amp;=
+\frac{1}{Z(\mathbf{x}, \boldsymbol{\theta})}\prod_{k=1}^{K-1}
+\exp(y_k(\boldsymbol{\theta}_k^T\mathbf{x} + b_k))\prod_{k=1}^{K-2} \mathbf{1}\{y_k =
+0 \lor y_{k+1} = 1\} \\
+&amp;= \frac{1}{Z(\mathbf{x}, \boldsymbol{\theta})}
+\exp(\sum_{k=1}^{K-1} y_k(\boldsymbol{\theta}_k^T\mathbf{x} + b_k))\prod_{k=1}^{K-2}\mathbf{1}\{y_k =
+0 \lor y_{k+1} = 1\}.
+\end{align}
+\]</span></p>
+<p>Looking at the edge potential term, we can see that the product will be equal to 1 only if the condition holds for all pairs of consecutive <span class="math display">\[y_k\]</span>s, i.e. if <span class="math display">\[(y_k = 1,\ y_{k+1} = 0)\]</span> doesn't occur anywhere in the sequence. If you think back to how we defined a valid sequence, this choice of edge potential ensures that cases where a patient "comes back to life" are assigned 0 probability, that is</p>
+<p><span class="math display">\[
+P_{\boldsymbol{\theta}}(\mathbf{y} = (y_1, y_2, \dots, y_{T}) \mid \mathbf{x}) =
+\begin{cases}
+\frac{1}{Z(\mathbf{x}, \boldsymbol{\theta})} 
+\exp(\sum_{k=1}^{K-1} y_k(\boldsymbol{\theta}_k^T\mathbf{x} + b_k))&amp; \text{if } \mathbf{y} \text{ is a valid sequence}\\
+0 &amp; \text{otherwise.}
+\end{cases}
+\]</span></p>
+<p>This also lets us write the normalizing constant as</p>
+<p><span class="math display">\[
+\begin{align}
+Z(\mathbf{x}, \boldsymbol{\theta}) &amp;= \sum_{y&#39;}
+\exp(\sum_{k=1}^{K-1} y&#39;_k(\boldsymbol{\theta}_k^T\mathbf{x} + b_k))\prod_{k=1}^{K-2}
+\mathbf{1}\{y&#39;_k = 0 \lor y&#39;_{k+1} = 1\}\\
+&amp;= \sum_{y&#39; \text{valid}}
+\exp(\sum_{k=1}^{K-1} y&#39;_k(\boldsymbol{\theta}_k^T\mathbf{x} + b_k)),
+\end{align}
+\]</span></p>
+<p>which you should recognize as the same form as the denominator in the MTLR density from the previous section.</p>
+<p>While the original formulation enforced it implicitly by assuming that only valid sequences occur in real-world data and deriving the normalization constant under this assumption, the graphical model formulation enforces the validity of <span class="math display">\[\mathbf{y}\]</span> explicitly through the use of edge potentials. Additionally, it lets us interpret the MTLR approach to dealing with censored data as marginalization over the unobserved <span class="math display">\[y_k\]</span> nodes in the graph (see Chapter 19 in <a href="https://mitpress.mit.edu/books/probabilistic-graphical-models">Koller &amp; Friedman</a>, where our independent censoring assumption corresponds to their missing-at-random assumption).</p>
+<h2 id="conclusions">Conclusions</h2>
+<p>Hopefully you now have a better understanding of the theory behind MTLR and are ready to solve some survival analysis problems! Make sure to check out the [colab notebook] for a PyTorch implementation and some experiments using simulated and real-world data. I'm also working on <a href="https://github.com/mkazmier/torchmtlr">a standalone PyTorch-based package</a>, which aims to be modular, extensible and easy to use.</p>
+<h2 id="references-useful-resources">References &amp; useful resources</h2>
+<ul>
+<li><a href="https://papers.nips.cc/paper/4210-learning-patient-specific-cancer-survival-distributions-as-a-sequence-of-dependent-regressors">The original NeurIPS publication</a> for theoretical background and <a href="https://era.library.ualberta.ca/items/3deb4dd9-788d-4c61-94a5-d3ee6645f74f">Ping Jin's master's thesis</a> for various theoretical insights and implementation tricks, including reformulation as softmax classifier and a proof that the second regularizer from the original paper is redundant.</li>
+<li><a href="https://arxiv.org/abs/1801.05512">This paper</a> which is the first application of Deep MTLR (as far as I know).</li>
+<li><a href="https://arxiv.org/abs/2003.08573v2">This paper</a> on Bayesian variant of Deep MTLR that allows for better handling of uncertainty and out-of-distribution samples.</li>
+<li><a href="https://square.github.io/pysurvival/">PySurvival</a> has PyTorch implementations of both MTLR and Deep MTLR as well as other useful survival models.</li>
+</ul>
+<h2 id="footnotes">Footnotes</h2>
+<section class="footnotes" role="doc-endnotes">
+<hr />
+<ol>
+<li id="fn1" role="doc-endnote"><p>Some types of events can occur more than once per lifetime, for example cancer recurrence or repeated illness. However, here we're restricting the analysis to non-recurrent, terminal events (like death).<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2" role="doc-endnote"><p>Note that the potential functions need not actually correspond to probability distributions, i.e. can take arbitrary values. This is because undirected graphical models are <em>globally normalized</em>, in contrast to directed models (like a Markov chain), which are <em>locally normalized</em>.<a href="#fnref2" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+</ol>
+</section>
+</body>
+</html>

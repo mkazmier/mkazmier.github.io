@@ -42,6 +42,7 @@ minima:
     twitter: mkazmier_
     github: mkazmier
 
+show_excerpts: true
 markdown: kramdown
 kramdown:
    math_engine: mathjax

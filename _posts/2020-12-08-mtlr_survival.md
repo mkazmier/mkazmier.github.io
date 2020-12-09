@@ -3,22 +3,9 @@ categories: ml
 date: 2020-12-08
 layout: post
 title: Predicting survival using multi-task logistic regression
+excerpt: Exploring an interesting ML algorithm for predicting survival-type outcomes.
 math: true
 ---
-
--   [Survival analysis](#survival-analysis)
--   [Notation and mathematical
-    preliminaries](#notation-and-mathematical-preliminaries)
--   [Learning survival distributions using multi-task logistic
-    regression](#learning-survival-distributions-using-multi-task-logistic-regression)
-    -   [The likelihood function](#the-likelihood-function)
-    -   [Dealing with censoring](#dealing-with-censoring)
--   [Using MTLR](#using-mtlr)
--   [Alternative derivation as a probabilistic graphical
-    model](#alternative-derivation-as-a-probabilistic-graphical-model)
--   [Conclusions](#conclusions)
--   [References & useful resources](#references-useful-resources)
--   [Footnotes](#footnotes)
 
 In this post, I will describe an interesting machine learning algorithm for
 survival prediction I\'ve been playing around with recently. This post will be
@@ -27,6 +14,21 @@ stratight to the [Colab
 notebook](https://colab.research.google.com/drive/1CkIEzctAE8_WPsXQdt2xPkY1kwbN3BSX?usp=sharing)
 or check out my PyTorch implementation on
 [Github](https://github.com/mkazmier/torchmtlr).
+
+### Contents
+-   [Survival analysis](#survival-analysis)
+-   [Notation and mathematical
+    preliminaries](#notation-and-mathematical-preliminaries)
+-   [Learning survival distributions using multi-task logistic
+    regression](#learning-survival-distributions-using-multi-task-logistic-regression)
+    -   [The likelihood function](#the-likelihood-function)
+    -   [Dealing with censoring](#dealing-with-censoring)
+-   [Alternative derivation as a probabilistic graphical
+    model](#alternative-derivation-as-a-probabilistic-graphical-model)
+-   [Using MTLR](#using-mtlr)
+-   [Conclusions](#conclusions)
+-   [References & useful resources](#references-useful-resources)
+-   [Footnotes](#footnotes)
 
 ## Survival analysis
 
@@ -136,15 +138,13 @@ classification problem:
 
 $$
 P_{\boldsymbol{\theta}_i}(y_k = 1 \mid \mathbf{x}) =
-\frac{1}{1+\exp(-(\boldsymbol{\theta}_k^T\mathbf{x} + b_k))},\ 1 \le k \le K - 1,
+\frac{1}{1+\exp(-(\boldsymbol{\theta}_k^T\mathbf{x} + b_k))},\ 1 \le k \le K,
 $$
 
-where $$y_i = 1$$ if $$t_{k-1} \le T < t_k$$, i.e. if the patient experienced an
+where $$y_k = 1$$ if $$t_{k-1} \le T < t_k$$, i.e. if the patient experienced an
 event between $$t_{k-1}$$ and $$t_k$$. We use a separate set of parameters
 $$(\boldsymbol{\theta}_k, b_k)$$ at each timepoint, to capture the potentially
-time-varying effect of features. Also, note that the event probability at time
-$$t_0 = 0$$ is $$P(y_0 = 1) = 0$$, since it\'s assumed that nobody experiences
-an event before the observation period. This can be represented as a binary
+time-varying effect of features. This can be represented as a binary
 sequence of length $$K$$, with 0s and 1s used as above.
 
 {:refdef: style="text-align: center;"}
@@ -165,8 +165,9 @@ model, we now need to derive the likelihood function.
 
 ### The likelihood function
 
-If the event probabilities were independent, the probability of a sequence
-$$\mathbf{y}$$ would be the joint probability of the individual $$y_i$$s:
+If the probability of event at each timepoint was independent from all the other
+timepoints, the join probability of a sequence $$\mathbf{y}$$ would simply be
+the product of the individual probabilites at each timepoint:
 
 $$
 P_{\boldsymbol{\Theta}}(\mathbf{y} = (y_1, y_2, \dots, y_{K-1}) \mid \mathbf{x}) =
@@ -187,7 +188,7 @@ $$
 P_{\boldsymbol{\theta}_k}(y_k = 1 \mid \mathbf{x}) &=
 \frac{1}{1+\exp(-(\boldsymbol{\theta}_k^T\mathbf{x} + b_k))}\\ &=
 \frac{\exp((\boldsymbol{\theta}_k^T\mathbf{x} +
-b_k)y_k)}{1+\exp(\boldsymbol{\theta}_k^T\mathbf{x} + b_k)}  \text{(Using property 1)}
+b_k)y_k)}{1+\exp(\boldsymbol{\theta}_k^T\mathbf{x} + b_k)} &  \text{(Using property 1 and }y_k=1\text{)}
 \end{align}
 $$
 
@@ -242,20 +243,21 @@ $$
 L(\boldsymbol{\Theta}, D) &= \log(\prod_{j=0}^N P_{\boldsymbol{\Theta}}(\mathbf{y}^{(j)}\mid \mathbf{x}^{(j)}))\\
 &= \sum_{j=1}^{N}\sum_{k=1}^{K-1}((\boldsymbol{\theta}_k^T \mathbf{x}^{(j)} +
 b_k)y_k^{(j)} - \log(\sum_{i=1}^{K}\exp(\sum_{k=i}^{K-1}\boldsymbol{\theta}_k^T
-\mathbf{x}^{(j)} + b_k))). 
+\mathbf{x}^{(j)} + b_k))), 
 \end{align*}
 $$
+
+with the $$y$$s defined as above.
 
 ### Dealing with censoring
 
 Recall that in survival analysis we usually have to deal with censoring, i.e. we
 don\'t know the true time of event for some patients. The key insight, used in
 many survival analysis algorithms, is that censored patients still provide
-partial information, namely that they did not experience the event before the
+partial information --- namely that they did not experience the event before the
 last time we knew their status. The original MTLR publication uses this to
 propose an elegant method of dealing with censoring. Let\'s have a look at an
-example survival encoding $$\mathbf{y}$$ for a censored instance (the green
-\'X\' indicates time of censoring:
+example survival encoding $$\mathbf{y}$$ for a censored instance:
 
 {:refdef: style="text-align: center;"}
 ![](/assets/images/mtlr_censoring.svg)
@@ -311,10 +313,9 @@ censored, is
 $$
 \begin{align*}
 L(\boldsymbol{\Theta}, D) &=
-\sum_{j=1}^{N-N_c}\sum_{k=1}^{K-1}(\boldsymbol{\theta}_k^T \mathbf{x}^{(j)} +
+\sum_{j=1}^{N-N_c-1}\sum_{k=1}^{K-1}(\boldsymbol{\theta}_k^T \mathbf{x}^{(j)} +
 b_k)y_k^{(j)} &\text{(Uncensored)}\\
- &+ \sum_{j=1}^{N_c}\sum_{i=1}^{K-1}\mathbf{1}\{t_i \ge T_c^{(j)}\}\exp(\sum_{k=i}^{K-1}((\boldsymbol{\theta}_k^T
-\mathbf{x}^{(j)} + b_k)y_k^{(j)})) &\text{(Censored)}\\
+ &+ \sum_{j=N-N_c}^{N}\log(\sum_{i=1}^{K-1}\mathbf{1}\{t_i \ge T_c^{(j)}\}\exp(\sum_{k=i}^{K-1}((\boldsymbol{\theta}_k^T\mathbf{x}^{(j)} + b_k)y_k^{(j)}))) &\text{(Censored)}\\
  &- \sum_{j=1}^{N}\log(\sum_{i=1}^{K}
 \exp(\sum_{k=i}^{K-1}\boldsymbol{\theta}_k^T \mathbf{x}^{(j)} + b_k)), &\text{(Normalizing constant)}
 \end{align*}
@@ -323,7 +324,7 @@ $$
 where $$\mathbf{1}\{\text{cond}\} = 1$$ if the condition in brackets is
 satisfied and 0 otherwise, and $$T_c$$ is the time of censoring.
 
-To mitigate overfitting, we usually add $$l_2$$ regularization:
+To mitigate overfitting, we usually add $$\ell_2$$ regularization:
 
 $$
 L(\boldsymbol{\Theta}, D)_{\mathrm{reg}} = L(\boldsymbol{\Theta}, D) + \frac{C_1}{2}\sum_{k=1}^{K-1}\Vert\boldsymbol{\theta}_k\Vert_2^2.
@@ -331,25 +332,9 @@ $$
 
 Here, $$C_1$$ is a hyperparameter determining the strength of regularization. It
 also controls how much the parameters change between consecutive timepoints and
-hence the smoothness of the predicted survival curves (see
+hence the smoothness of the predicted survival curves (see the Appendix
 [here](https://era.library.ualberta.ca/items/3deb4dd9-788d-4c61-94a5-d3ee6645f74f)
 for proof).
-
-## Using MTLR
-
-The model described above can be used to learn flexible, potentially
-time-varying survival functions as it is. However, since it\'s differentiable
-end-to-end, there are many more exciting possibilites. You can effectively use
-it as a survival prediction \'head\' in any neural net, just like you would use
-a logistic regression layer for binary classification --- for example on top of
-a CNN to learn to predict survival directly from medical images (something I\'m
-working on now), an LSTM to handle time-varying features or something more
-exotic like a [neural ODE](http://arxiv.org/abs/1907.03907). Check out the
-[Colab
-notebook](https://colab.research.google.com/drive/1CkIEzctAE8_WPsXQdt2xPkY1kwbN3BSX?usp=sharing)
-accompanying this post for examples using both linear and deep MTLR. I also made
-a ligthweight [PyTorch implementation](https://github.com/mkazmier/torchmtlr)
-that can be used with any PyTorch model.
 
 ## Alternative derivation as a probabilistic graphical model
 
@@ -358,8 +343,9 @@ that can be used with any PyTorch model.
 MTLR can also be viewed from the perspective of probabilistic graphical models.
 A *conditional random field* (CRF) is an undirected graphical model which is
 essentially an extension of logistic regression to problems with structured
-outputs. In particular, MTLR can be viewed as an instance of *linear chain CRF*
-corresponding to the following graphical model:
+outputs. In particular, MTLR can be viewed as an instance of *linear chain CRF*,
+often used for sequence labeling tasks, corresponding to the following graphical
+model:
 
 {:refdef: style="text-align: center;"}
 ![](/assets/images/mtlr_crf.svg)
@@ -405,9 +391,9 @@ $$
 $$
 
 (the role of the second potential function will become clear soon). Note that
-while most CRFs used in e.g. natural language processing tend to shared
-parameters over all nodes, here we use a separate weight vector for each node to
-capture the time-varying effect of features.
+while most CRFs used in e.g. natural language processing tend to share
+parameters over the entire sequence, here we use a separate weight vector for
+each node to capture the time-varying effect of features.
 
 Plugging the above potentials into the above density gives
 
@@ -465,15 +451,27 @@ Friedman](https://mitpress.mit.edu/books/probabilistic-graphical-models), where
 our independent censoring assumption corresponds to their missing-at-random
 assumption).
 
+## Using MTLR
+
+The model described above can be used to learn flexible, potentially
+time-varying survival functions as it is. However, since it\'s differentiable
+end-to-end, there are many more exciting possibilites. You can effectively use
+it as a survival prediction \'head\' in any neural net, just like you would use
+a logistic regression layer for binary classification --- for example on top of
+a CNN to learn to predict survival directly from medical images (something I\'m
+working on now), an LSTM to handle time-varying features or something more
+exotic like a [neural ODE](http://arxiv.org/abs/1907.03907).
+
 ## Conclusions
 
-Hopefully you now have a better understanding of the theory behind MTLR
-and are ready to solve some survival analysis problems! Make sure to
-check out the \[colab notebook\] for a PyTorch implementation and some
-experiments using simulated and real-world data. I\'m also working on [a
-standalone PyTorch-based
-package](https://github.com/mkazmier/torchmtlr), which aims to be
-modular, extensible and easy to use.
+Hopefully you now have a better understanding of the theory behind MTLR and are
+ready to solve some survival analysis problems! Make sure to check out the
+[Colab
+notebook](https://colab.research.google.com/drive/1CkIEzctAE8_WPsXQdt2xPkY1kwbN3BSX?usp=sharing)
+accompanying this post for examples using both linear and deep MTLR. I\'m also
+working on [a standalone PyTorch-based
+package](https://github.com/mkazmier/torchmtlr), which aims to be modular,
+extensible and easy to use in any PyTorch model.
 
 ## References & useful resources
 
@@ -501,7 +499,6 @@ modular, extensible and easy to use.
     death).
 
 [^2]: Note that the potential functions need not actually correspond to
-    probability distributions, i.e. can take arbitrary values. This is
-    because undirected graphical models are *globally normalized*, in
-    contrast to directed models (like a Markov chain), which are
-    *locally normalized*.
+    probability distributions, i.e. can take arbitrary values. The global
+    normalizing constant ensures that the model defines a valid probability
+    distribution.

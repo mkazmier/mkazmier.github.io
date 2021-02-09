@@ -141,8 +141,8 @@ P_{\boldsymbol{\theta}_i}(y_k = 1 \mid \mathbf{x}) =
 \frac{1}{1+\exp(-(\boldsymbol{\theta}_k^T\mathbf{x} + b_k))},\ 1 \le k \le K,
 $$
 
-where $$y_k = 1$$ if $$t_{k-1} \le T < t_k$$, i.e. if the patient experienced an
-event between $$t_{k-1}$$ and $$t_k$$. We use a separate set of parameters
+where $$y_k = 1$$ if T < t_k$$, i.e. if the patient experienced an
+event prior to $$t_k$$. We use a separate set of parameters
 $$(\boldsymbol{\theta}_k, b_k)$$ at each timepoint, to capture the potentially
 time-varying effect of features. This can be represented as a binary
 sequence of length $$K$$, with 0s and 1s used as above.

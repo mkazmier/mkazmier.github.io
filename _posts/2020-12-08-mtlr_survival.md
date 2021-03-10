@@ -313,9 +313,9 @@ censored, is
 $$
 \begin{align*}
 L(\boldsymbol{\Theta}, D) &=
-\sum_{j=1}^{N-N_c-1}\sum_{k=1}^{K-1}(\boldsymbol{\theta}_k^T \mathbf{x}^{(j)} +
+\sum_{j=1}^{N-N_c}\sum_{k=1}^{K-1}(\boldsymbol{\theta}_k^T \mathbf{x}^{(j)} +
 b_k)y_k^{(j)} &\text{(Uncensored)}\\
- &+ \sum_{j=N-N_c}^{N}\log(\sum_{i=1}^{K-1}\mathbf{1}\{t_i \ge T_c^{(j)}\}\exp(\sum_{k=i}^{K-1}((\boldsymbol{\theta}_k^T\mathbf{x}^{(j)} + b_k)y_k^{(j)}))) &\text{(Censored)}\\
+ &+ \sum_{j=N-N_c+1}^{N}\log(\sum_{i=1}^{K-1}\mathbf{1}\{t_i \ge T_c^{(j)}\}\exp(\sum_{k=i}^{K-1}((\boldsymbol{\theta}_k^T\mathbf{x}^{(j)} + b_k)y_k^{(j)}))) &\text{(Censored)}\\
  &- \sum_{j=1}^{N}\log(\sum_{i=1}^{K}
 \exp(\sum_{k=i}^{K-1}\boldsymbol{\theta}_k^T \mathbf{x}^{(j)} + b_k)), &\text{(Normalizing constant)}
 \end{align*}

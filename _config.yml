@@ -28,8 +28,8 @@ twitter_username: mkazmier_
 github_username: mkazmier
 
 author:
-  name: ""
-  email: ""
+  name: Michal Kazmierski
+  email: "michal.kazmierski@mail.utoronto.ca"
 # Build settings
 #theme: minima
 plugins:
@@ -41,6 +41,7 @@ minima:
   social_links:
     twitter: mkazmier_
     github: mkazmier
+    linkedin: michal-kazmierski-b254b6129 
 
 show_excerpts: true
 markdown: kramdown
